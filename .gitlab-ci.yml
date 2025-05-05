@@ -1,0 +1,65 @@
+stages:
+  - lint
+  - test
+  - build
+  - deploy
+
+variables:
+  POSTGRES_DB: duplify_dev
+  POSTGRES_USER: $POSTGRES_USER
+  POSTGRES_PASSWORD: $POSTGRES_PASSWORD
+
+lint-backend:
+  stage: lint
+  image: python:3.11
+  script:
+    - pip install ruff
+    - ruff check backend/
+
+lint-frontend:
+  stage: lint
+  image: node:18
+  script:
+    - npm install
+    - npx eslint "frontend/src/**/*.{js,jsx,ts,tsx}"
+
+test-backend:
+  stage: test
+  image: python:3.11
+  services:
+    - postgres:13
+  variables:
+    POSTGRES_DB: $POSTGRES_DB
+  script:
+    - pip install -r backend/requirements.txt
+    - python backend/manage.py migrate
+    - pytest --maxfail=1 --disable-warnings -q
+
+test-frontend:
+  stage: test
+  image: node:18
+  script:
+    - cd frontend
+    - npm install
+    - npm test -- --watchAll=false
+
+build:
+  stage: build
+  image: docker:latest
+  services:
+    - docker:dind
+  script:
+    - docker build -t registry.gitlab.com/<group>/duplify/backend:latest -f backend/Dockerfile backend
+    - docker build -t registry.gitlab.com/<group>/duplify/frontend:latest -f frontend/Dockerfile frontend
+    - docker push registry.gitlab.com/<group>/duplify/backend:latest
+    - docker push registry.gitlab.com/<group>/duplify/frontend:latest
+  only:
+    - main
+
+deploy-staging:
+  stage: deploy
+  image: alpine/k8s:latest
+  script:
+    - kubectl apply -f k8s/ --context staging
+  only:
+    - main
