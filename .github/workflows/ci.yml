@@ -1,1 +1,84 @@
-<insert the YAML above>
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  lint-backend:
+    runs-on: ubuntu-latest
+    env:
+      # No secrets needed here
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+      - name: Install ruff
+        run: pip install ruff
+      - name: Run ruff lint
+        run: ruff check backend/
+
+  lint-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "18"
+      - name: Install dependencies
+        run: npm ci
+        working-directory: frontend
+      - name: Run ESLint
+        run: npx eslint "src/**/*.{js,jsx,ts,tsx}"
+        working-directory: frontend
+
+  test-backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:13
+        env:
+          POSTGRES_USER: duplify
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: duplify_dev
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U duplify"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+    env:
+      DATABASE_URL: postgres://duplify:${{ secrets.POSTGRES_PASSWORD }}@localhost:5432/duplify_dev
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: pip install -r backend/requirements.txt
+      - name: Run migrations
+        run: python backend/manage.py migrate
+      - name: Run backend tests
+        run: pytest --maxfail=1 --disable-warnings -q
+
+  test-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "18"
+      - name: Install dependencies
+        run: npm ci
+        working-directory: frontend
+      - name: Run frontend tests
+        run: npm test -- --watchAll=false
+        working-directory: frontend
