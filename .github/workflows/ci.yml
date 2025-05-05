@@ -2,15 +2,15 @@ name: CI
 
 on:
   push:
-    branches: [master]
+    branches:
+      - master
   pull_request:
-    branches: [master]
+    branches:
+      - master
 
 jobs:
   lint-backend:
     runs-on: ubuntu-latest
-    env:
-      # No secrets needed here
     steps:
       - uses: actions/checkout@v3
       - name: Set up Python
